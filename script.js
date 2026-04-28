@@ -1,10 +1,51 @@
 // =========================================================
-// REALITY SHOW SIMULATOR — CLEAN FOUNDATION SCRIPT
-// No temporary logic. No placeholder data.
-// All systems are structured and ready for real engines.
+// REALITY SHOW SIMULATOR — MASTER CONTROLLER
+// Integrates data, engines, UI, and global state.
 // =========================================================
 
-// ===== Global State =====
+// ----------------------
+// IMPORT DATA
+// ----------------------
+import { PREMADE_CAST } from "./data/premadeCast.js";
+import { TRAITS } from "./data/traits.js";
+import { STAT_CATEGORIES, DEFAULT_STATS } from "./data/stats.js";
+import { CHALLENGES } from "./data/challenges.js";
+import { EVENTS } from "./data/events.js";
+import { ADVANTAGES } from "./data/advantages.js";
+import { INTRO_LINES } from "./data/introLines.js";
+import { EXIT_LINES } from "./data/exitLines.js";
+
+// ----------------------
+// IMPORT ENGINES
+// ----------------------
+import { nextPhase, resetGameState } from "./engine/gameLoop.js";
+import { runChallenge } from "./engine/challengeEngine.js";
+import { runEvents } from "./engine/eventEngine.js";
+import { runElimination } from "./engine/eliminationEngine.js";
+import { updateTrackRecordForEpisode } from "./engine/trackRecordEngine.js";
+import { runFinale } from "./engine/finaleEngine.js";
+
+// ----------------------
+// IMPORT UI MODULES
+// ----------------------
+import { initMainMenuUI } from "./ui/mainMenu.js";
+import { renderCurrentCast } from "./ui/castSelect.js";
+import { initStatsPageUI, renderStatsPage } from "./ui/statsPage.js";
+import { updateEpisodeUI } from "./ui/episodeUI.js";
+import { renderChallengeUI } from "./ui/challengeUI.js";
+import { renderEliminationUI } from "./ui/eliminationUI.js";
+import { renderTrackRecordUI } from "./ui/trackRecordUI.js";
+import { renderFinaleUI } from "./ui/finaleUI.js";
+
+// ----------------------
+// IMPORT UTILS
+// ----------------------
+import { choice } from "./utils/random.js";
+import { format } from "./utils/text.js";
+
+// =========================================================
+// GLOBAL STATE
+// =========================================================
 
 const state = {
   options: {
@@ -13,337 +54,134 @@ const state = {
     finaleFormat: "top3",
   },
 
-  premadeCast: [],        // Loaded from data files later
-  currentCast: [],        // User-selected cast
-  eliminated: [],         // Eliminated contestants
+  premadeCast: PREMADE_CAST,
+  currentCast: [],
+  eliminated: [],
 
   episodeNumber: 1,
-  phase: "challenge",     // "challenge" | "events" | "elimination"
+  phase: "challenge",
 
-  trackRecord: {},        // { contestantId: [ "WIN", "SAFE", ... ] }
+  trackRecord: {},
+  relationships: {},
+  alliances: [],
+  advantages: {},
 
-  // Relationship, alliances, advantages, etc.
-  relationships: {},      // { idA: { idB: score } }
-  alliances: [],          // Array of alliance objects
-  advantages: {},         // { contestantId: [ advantageObjects ] }
+  // Engine outputs
+  challengeResults: null,
+  lastEventText: "",
+  lastEliminationText: "",
+  finaleResults: null,
+  winner: null,
 };
 
-// ===== Utility Helpers =====
-
-function $(selector) {
-  return document.querySelector(selector);
-}
-
-function createEl(tag, className, text) {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-
-// ===== Panel Switching =====
-
-function showPanel(id) {
-  document.querySelectorAll(".panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === id);
-  });
-}
-
 // =========================================================
-// CAST MANAGEMENT
+// EPISODE FLOW CONTROLLER
 // =========================================================
 
-function renderCurrentCast() {
-  const list = $("#current-cast-list");
-  list.innerHTML = "";
-
-  state.currentCast.forEach((c) => {
-    const li = createEl("li");
-    li.appendChild(createEl("span", null, c.name));
-    li.appendChild(createEl("span", "cast-pill", "In cast"));
-    list.appendChild(li);
-  });
-}
-
-function addPremadeFromSearch() {
-  const query = $("#premade-search").value.trim().toLowerCase();
-  if (!query) return;
-
-  const found = state.premadeCast.find((c) =>
-    c.name.toLowerCase().includes(query)
-  );
-
-  if (!found) {
-    alert("No premade character found.");
-    return;
-  }
-
-  if (state.currentCast.some((c) => c.id === found.id)) {
-    alert("Already in cast.");
-    return;
-  }
-
-  state.currentCast.push(structuredClone(found));
-  renderCurrentCast();
-}
-
-function addRandomPremade() {
-  const available = state.premadeCast.filter(
-    (c) => !state.currentCast.some((cc) => cc.id === c.id)
-  );
-
-  if (available.length === 0) {
-    alert("No premade characters left to add.");
-    return;
-  }
-
-  const chosen = available[Math.floor(Math.random() * available.length)];
-  state.currentCast.push(structuredClone(chosen));
-  renderCurrentCast();
-}
-
-function addCustomCharacter() {
-  const name = prompt("Enter custom character name:");
-  if (!name || !name.trim()) return;
-
-  const id = `custom_${Date.now()}`;
-
-  const custom = {
-    id,
-    name: name.trim(),
-    image: null,
-    stats: {},     // Filled later
-    traits: [],    // Filled later
-  };
-
-  state.currentCast.push(custom);
-  renderCurrentCast();
-}
-
-// =========================================================
-// STATS PAGE
-// =========================================================
-
-function renderStatsList(filter = "") {
-  const container = $("#stats-list");
-  container.innerHTML = "";
-
-  const q = filter.trim().toLowerCase();
-
-  const filtered = state.premadeCast.filter((c) =>
-    c.name.toLowerCase().includes(q)
-  );
-
-  if (filtered.length === 0) {
-    const empty = createEl("div", "muted", "No characters match that search.");
-    empty.style.padding = "10px 12px";
-    container.appendChild(empty);
-    return;
-  }
-
-  filtered.forEach((c) => {
-    const card = createEl("div", "stats-card");
-
-    const avatar = createEl("div", "stats-avatar", c.name[0] ?? "?");
-    const meta = createEl("div", "stats-meta");
-    const tags = createEl("div", "stats-tags");
-
-    meta.appendChild(createEl("h4", null, c.name));
-
-    // Stats summary (real stats will be added later)
-    const statsLine = createEl("p", null, "Stats: (to be implemented)");
-    meta.appendChild(statsLine);
-
-    // Traits
-    c.traits?.forEach((t) => {
-      tags.appendChild(createEl("span", "tag", t.replace(/_/g, " ")));
-    });
-
-    card.appendChild(avatar);
-    card.appendChild(meta);
-    card.appendChild(tags);
-
-    container.appendChild(card);
-  });
-}
-
-// =========================================================
-// TRACK RECORD
-// =========================================================
-
-function ensureTrackRecordEntry(id) {
-  if (!state.trackRecord[id]) {
-    state.trackRecord[id] = [];
-  }
-}
-
-function addTrackResult(id, code) {
-  ensureTrackRecordEntry(id);
-  state.trackRecord[id].push(code);
-}
-
-function renderTrackRecord() {
-  const wrapper = $("#track-record-table-wrapper");
-  wrapper.innerHTML = "";
-
-  const all = [...state.currentCast, ...state.eliminated];
-  if (all.length === 0) {
-    wrapper.appendChild(
-      createEl("div", "muted", "Track record will appear once the game starts.")
-    );
-    return;
-  }
-
-  const maxEpisodes = Math.max(
-    0,
-    ...all.map((c) => (state.trackRecord[c.id] || []).length)
-  );
-
-  const table = createEl("table", "track-record-table");
-  const thead = createEl("thead");
-  const headerRow = createEl("tr");
-
-  headerRow.appendChild(createEl("th", null, "Contestant"));
-  for (let ep = 1; ep <= maxEpisodes; ep++) {
-    headerRow.appendChild(createEl("th", null, `Ep ${ep}`));
-  }
-
-  thead.appendChild(headerRow);
-  table.appendChild(thead);
-
-  const tbody = createEl("tbody");
-
-  all.forEach((c) => {
-    const row = createEl("tr");
-    row.appendChild(createEl("td", null, c.name));
-
-    const results = state.trackRecord[c.id] || [];
-    for (let ep = 0; ep < maxEpisodes; ep++) {
-      const code = results[ep] || "";
-      const cell = createEl("td", null, code);
-      row.appendChild(cell);
-    }
-
-    tbody.appendChild(row);
-  });
-
-  table.appendChild(tbody);
-  wrapper.appendChild(table);
-}
-
-// =========================================================
-// GAME FLOW (NO TEMPORARY LOGIC)
-// =========================================================
-
-function resetGameStateForNewSimulation() {
-  state.episodeNumber = 1;
-  state.phase = "challenge";
-  state.trackRecord = {};
-  state.eliminated = [];
-}
-
-function updateEpisodeHeader() {
-  $("#episode-title").textContent = `Episode ${state.episodeNumber}`;
-  $("#episode-phase").textContent = state.phase;
-}
-
-function nextPhase() {
-  // Placeholder: real engines will be added later
-  // challengeEngine.run()
-  // eventEngine.run()
-  // eliminationEngine.run()
-
+function advanceEpisode() {
+  // Run engine logic for the current phase
   if (state.phase === "challenge") {
-    state.phase = "events";
+    runChallenge(state);
   } else if (state.phase === "events") {
-    state.phase = "elimination";
+    runEvents(state);
   } else if (state.phase === "elimination") {
-    state.phase = "challenge";
-    state.episodeNumber += 1;
-  }
+    const finaleTriggered = runElimination(state);
+    updateTrackRecordForEpisode(state);
 
-  updateEpisodeHeader();
-}
-
-// =========================================================
-// CAST SIDEBAR
-// =========================================================
-
-function renderGameCastList() {
-  const list = $("#game-cast-list");
-  list.innerHTML = "";
-
-  state.currentCast.forEach((c) => {
-    const li = createEl("li");
-    li.appendChild(createEl("span", null, c.name));
-    li.appendChild(createEl("span", "muted", "In"));
-    list.appendChild(li);
-  });
-}
-
-// =========================================================
-// OPTIONS
-// =========================================================
-
-function syncOptionsFromUI() {
-  state.options.advantagesEnabled = $("#toggle-advantages").checked;
-  state.options.specialChallengesEnabled = $("#toggle-special-challenges").checked;
-  state.options.finaleFormat = $("#finale-format").value;
-}
-
-// =========================================================
-// EVENT LISTENERS
-// =========================================================
-
-function setupEventListeners() {
-  $("#add-premade-btn").addEventListener("click", addPremadeFromSearch);
-  $("#add-random-premade-btn").addEventListener("click", addRandomPremade);
-  $("#add-custom-btn").addEventListener("click", addCustomCharacter);
-
-  $("#view-stats-btn").addEventListener("click", () => {
-    renderStatsList($("#stats-search").value);
-    showPanel("stats-page");
-  });
-
-  $("#back-from-stats-btn").addEventListener("click", () => {
-    showPanel("main-menu");
-  });
-
-  $("#stats-search").addEventListener("input", (e) => {
-    renderStatsList(e.target.value);
-  });
-
-  $("#start-game-btn").addEventListener("click", () => {
-    if (state.currentCast.length < 2) {
-      alert("Add at least 2 contestants.");
+    if (finaleTriggered) {
+      state.phase = "finale";
+      updateEpisodeUI(state);
+      renderFinaleUI(state);
+      renderTrackRecordUI(state);
       return;
     }
+  } else if (state.phase === "finale") {
+    runFinale(state);
+    renderFinaleUI(state);
+    return;
+  }
 
-    syncOptionsFromUI();
-    resetGameStateForNewSimulation();
-    renderGameCastList();
-    renderTrackRecord();
-    updateEpisodeHeader();
-    showPanel("game-panel");
-  });
+  // Update UI for the phase that just ran
+  updateEpisodeUI(state);
+  renderChallengeUI(state);
+  renderEliminationUI(state);
+  renderTrackRecordUI(state);
 
-  $("#back-to-menu-btn").addEventListener("click", () => {
-    if (!confirm("End simulation and return to menu")) return;
-    showPanel("main-menu");
-  });
+  // Move to next phase
+  nextPhase(state);
 
-  $("#next-phase-btn").addEventListener("click", nextPhase);
+  // Update UI for new phase
+  updateEpisodeUI(state);
 }
 
 // =========================================================
-// INIT
+// NAVIGATION
+// =========================================================
+
+function showPanel(id) {
+  document.querySelectorAll(".panel").forEach((p) => {
+    p.classList.toggle("active", p.id === id);
+  });
+}
+
+// =========================================================
+// GAME START
+// =========================================================
+
+function startGame() {
+  if (state.currentCast.length < 2) {
+    alert("Add at least 2 contestants to start the simulation.");
+    return;
+  }
+
+  resetGameState(state);
+
+  // Reset UI
+  document.querySelector("#challenge-description").textContent = "";
+  document.querySelector("#events-log").textContent = "";
+  document.querySelector("#elimination-log").textContent = "";
+
+  // Render initial UI
+  updateEpisodeUI(state);
+  renderTrackRecordUI(state);
+  renderCurrentCast(state);
+
+  showPanel("game-panel");
+}
+
+// =========================================================
+// BUTTON HOOKS
+// =========================================================
+
+function initButtons() {
+  document.querySelector("#next-phase-btn").addEventListener("click", () => {
+    advanceEpisode();
+  });
+
+  document.querySelector("#back-to-menu-btn").addEventListener("click", () => {
+    if (!confirm("End the current simulation and return to the main menu")) return;
+    showPanel("main-menu");
+  });
+
+  document.querySelector("#start-game-btn").addEventListener("click", startGame);
+}
+
+// =========================================================
+// INITIALIZATION
 // =========================================================
 
 function init() {
-  renderCurrentCast();
-  renderStatsList("");
-  renderTrackRecord();
-  setupEventListeners();
+  // Render initial UI
+  renderCurrentCast(state);
+  renderStatsPage(state, "");
+  renderTrackRecordUI(state);
+
+  // Initialize UI modules
+  initMainMenuUI(state);
+  initStatsPageUI(state);
+  initButtons();
+
+  // Show main menu
   showPanel("main-menu");
 }
 
