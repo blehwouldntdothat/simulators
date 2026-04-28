@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Reality Show Simulator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1>Reality Show Simulator</h1>
+    <p class="subtitle">Total Drama / Survivor / Disventure Camp style browser game</p>
+  </header>
+
+  <main class="app-main">
+    <!-- MAIN MENU -->
+    <section id="main-menu" class="panel active">
+      <h2>Main Menu</h2>
+
+      <div class="panel-group">
+        <div class="panel-box">
+          <h3>Cast Setup</h3>
+          <div class="field-row">
+            <label for="premade-search">Search premade characters</label>
+            <input type="text" id="premade-search" placeholder="Type a name...">
+          </div>
+          <div class="button-row">
+            <button id="add-premade-btn">Add Selected</button>
+            <button id="add-random-premade-btn">Add Random Premade</button>
+          </div>
+
+          <div class="field-row">
+            <button id="add-custom-btn">Add Custom Character</button>
+          </div>
+
+          <div class="current-cast">
+            <h4>Current Cast</h4>
+            <ul id="current-cast-list"></ul>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <h3>Game Options</h3>
+
+          <div class="toggle-row">
+            <label>
+              <input type="checkbox" id="toggle-advantages" checked>
+              Enable advantages (idols, vote steal, etc.)
+            </label>
+          </div>
+
+          <div class="toggle-row">
+            <label>
+              <input type="checkbox" id="toggle-special-challenges" checked>
+              Enable special challenges (sudden death, musical, etc.)
+            </label>
+          </div>
+
+          <div class="field-row">
+            <label for="finale-format">Finale format</label>
+            <select id="finale-format">
+              <option value="top2">Top 2</option>
+              <option value="top3" selected>Top 3</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <button id="view-stats-btn" class="secondary">View Premade Stats</button>
+        <button id="start-game-btn" class="primary">Start Simulation</button>
+      </div>
+    </section>
+
+    <!-- STATS PAGE -->
+    <section id="stats-page" class="panel">
+      <div class="panel-header">
+        <h2>Premade Cast Stats</h2>
+        <button id="back-from-stats-btn" class="secondary small">Back to Menu</button>
+      </div>
+
+      <div class="field-row">
+        <label for="stats-search">Search premade characters</label>
+        <input type="text" id="stats-search" placeholder="Type a name...">
+      </div>
+
+      <div id="stats-list" class="stats-list">
+        <!-- Filled by script.js -->
+      </div>
+    </section>
+
+    <!-- GAME PANEL -->
+    <section id="game-panel" class="panel">
+      <div class="panel-header">
+        <h2 id="episode-title">Episode 1</h2>
+        <button id="back-to-menu-btn" class="secondary small">End Simulation</button>
+      </div>
+
+      <div id="episode-phase" class="episode-phase-label">Challenge</div>
+
+      <div class="episode-layout">
+        <div class="episode-main">
+          <div class="episode-block">
